@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- Nouveau Design (Fusionné) --- */
+@layer base {
+  body {
+    /* Couleur de fond moderne et texte lissé */
+    @apply bg-stone-50 text-slate-800 antialiased;
+  }
+}
+
+/* --- Ton code existant (Gardé) --- */
+html, body, #root {
+  height: 100%;
+}
+
+/* Styles pour l'impression papier (Très important de les garder) */
+@media print {
+  .print\:hidden { display: none !important; }
+  .print\:gap-1 { gap: 0.25rem !important; }
+  .print\:h-10 { height: 2.5rem !important; }
+  .print\:rounded-md { border-radius: 0.375rem !important; }
+  
+  /* Force le fond blanc pour l'impression */
+  body {
+    background-color: white !important;
+  }
+}
