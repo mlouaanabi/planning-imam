@@ -9,39 +9,14 @@ const PROFILES_KEY = "imam_profiles_list";
 
 export type SavedProfile = { name: string; publicId: string; editId: string; };
 
-// VOS HORAIRES PRÉDÉFINIS ICI
-const PRESETS = {
-    ete: { start: "04:00", end: "23:30" }, // Été : large amplitude
-    hiver: { start: "06:00", end: "21:30" } // Hiver : réduit
-};
-
 export function usePlanning() {
   const [config, setConfig] = useState({
-    imamName: "Imam", 
-    isEte: true, 
-    start: PRESETS.ete.start, 
-    end: PRESETS.ete.end, 
-    interval: 30, 
-    weekIndex: 0, 
-    restDays: [0, 6]
+    imamName: "Imam", isEte: true, start: "04:00", end: "22:30", interval: 30, weekIndex: 0, restDays: [0, 6]
   });
-  
   const [weeks, setWeeks] = useState<Week[]>([{ label: "Semaine A", data: {} }]);
   const [quickLabels, setQuickLabels] = useState<QuickLabel[]>([]);
   const [cloudIds, setCloudIds] = useState({ publicId: "", editId: "" });
   const [profiles, setProfiles] = useState<SavedProfile[]>([]);
-
-  // Basculer ETE / HIVER
-  const toggleSeason = () => {
-      const newIsEte = !config.isEte;
-      setConfig(prev => ({
-          ...prev,
-          isEte: newIsEte,
-          start: newIsEte ? PRESETS.ete.start : PRESETS.hiver.start,
-          end: newIsEte ? PRESETS.ete.end : PRESETS.hiver.end
-      }));
-      toast.success(`Mode ${newIsEte ? "ÉTÉ ☀️" : "HIVER ❄️"} activé`);
-  };
 
   const times = useCallback(() => {
     const out: string[] = [];
@@ -66,7 +41,7 @@ export function usePlanning() {
     setWeeks(prev => {
       const newWeeks = [...prev];
       const currentWeek = newWeeks[config.weekIndex] || newWeeks[0];
-      if (currentWeek.data[day]) { delete currentWeek.data[day][time]; }
+      if (currentWeek.data[day]) delete currentWeek.data[day][time];
       return newWeeks;
     });
   };
@@ -93,7 +68,7 @@ export function usePlanning() {
   const resetPlanning = () => {
       if(!confirm("Créer un nouveau planning vierge ?")) return;
       setWeeks([{ label: "Semaine A", data: {} }]);
-      setConfig(prev => ({ ...prev, imamName: "Nouvel Imam", weekIndex: 0, restDays: [0, 6], start: "06:00", end: "22:00" }));
+      setConfig(prev => ({ ...prev, imamName: "Nouvel Imam", weekIndex: 0, restDays: [0, 6] }));
       setCloudIds({ publicId: "", editId: "" });
       toast.info("Planning vierge créé");
   };
@@ -141,21 +116,36 @@ export function usePlanning() {
       if (parsed.settings) setConfig(parsed.settings);
       else if (parsed.imamName) { setConfig(prev => ({ ...prev, imamName: parsed.imamName, isEte: parsed.isEte ?? prev.isEte, weekIndex: 0 })); }
       if (parsed.quickLabels) setQuickLabels(parsed.quickLabels);
-      setCloudIds({ publicId: targetP, editId: targetE });
+      setCloudIds({ publicId: targetP, editId: targetE || "" }); // On garde l'editId si fourni (admin), sinon vide (public)
       toast.dismiss(loading); toast.success("Planning chargé !");
     } catch (e) { toast.dismiss(loading); toast.error("Erreur lecture"); }
   };
 
+  // --- NOUVEAU : CHARGEMENT URL & LOCAL ---
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) { try {
-        const parsed = JSON.parse(raw);
-        if (parsed.weeks) setWeeks(parsed.weeks);
-        if (parsed.imamName) setConfig(prev => ({ ...prev, ...parsed }));
-        if (parsed.publicId) setCloudIds({ publicId: parsed.publicId, editId: parsed.editId });
-      } catch (e) {} }
+    // 1. Priorité à l'URL : ?id=...
+    const params = new URLSearchParams(window.location.search);
+    const urlId = params.get('id');
+    const urlEdit = params.get('edit'); // Optionnel, pour les admins
+
+    if (urlId) {
+        // Si il y a un ID dans l'URL, on le charge immédiatement
+        loadFromCloud(urlId, urlEdit || undefined);
+    } else {
+        // 2. Sinon, on charge le dernier état local
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) { try {
+            const parsed = JSON.parse(raw);
+            if (parsed.weeks) setWeeks(parsed.weeks);
+            if (parsed.imamName) setConfig(prev => ({ ...prev, ...parsed }));
+            if (parsed.publicId) setCloudIds({ publicId: parsed.publicId, editId: parsed.editId });
+        } catch (e) {} }
+    }
+    
+    // Charger la liste des profils
     const rawProfiles = localStorage.getItem(PROFILES_KEY);
     if (rawProfiles) try { setProfiles(JSON.parse(rawProfiles)); } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -168,7 +158,6 @@ export function usePlanning() {
     currentWeek: weeks[config.weekIndex] || weeks[0], times: times(),
     updateCell, deleteCell,
     saveToCloud, loadFromCloud, cloudIds,
-    profiles, saveProfile, deleteProfile, resetPlanning, copyDataFromProfile,
-    toggleSeason // Nouvelle fonction exportée
+    profiles, saveProfile, deleteProfile, resetPlanning, copyDataFromProfile
   };
 }
