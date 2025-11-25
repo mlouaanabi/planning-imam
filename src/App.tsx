@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Toaster, toast } from 'sonner';
-import { Settings, Cloud, Users, PlusCircle, Trash2, Check, ChevronDown, Copy, CalendarOff, Scissors, Clipboard, Upload, FileJson, Sun, Moon, Clock, Share2 } from 'lucide-react';
+import { Settings, Cloud, Users, PlusCircle, Trash2, Check, ChevronDown, Copy, CalendarOff, Scissors, Clipboard, Upload, FileJson, Sun, Moon, Clock, Share2, Lock } from 'lucide-react';
 import { usePlanning } from './hooks/usePlanning';
 import { EventCell } from './components/EventCell';
 import { EditModal } from './components/EditModal';
@@ -21,11 +21,21 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
+  // --- MODE LECTURE SEULE ---
+  // Si on n'a pas de "Secret d'édition" (editId), on est un simple visiteur
+  const isReadOnly = !cloudIds.editId;
+
   // CLIC DROIT
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [clipboard, setClipboard] = useState<{ cell: Cell, mode: 'copy' | 'cut' } | null>(null);
   useEffect(() => { const close = () => setContextMenu(null); window.addEventListener('click', close); return () => window.removeEventListener('click', close); }, []);
-  const handleContextMenu = (e: React.MouseEvent, day: number, time: string, hasContent: boolean) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, day, time, hasContent }); };
+  
+  const handleContextMenu = (e: React.MouseEvent, day: number, time: string, hasContent: boolean) => { 
+      if (isReadOnly) return; // Pas de menu en lecture seule
+      e.preventDefault(); 
+      setContextMenu({ x: e.clientX, y: e.clientY, day, time, hasContent }); 
+  };
+  
   const handleCopy = () => { if (!contextMenu) return; const c = currentWeek.data[contextMenu.day]?.[contextMenu.time]; if(c){setClipboard({cell:c, mode:'copy'}); toast.info("Copié");} setContextMenu(null); };
   const handleCutImmediate = () => { if (!contextMenu) return; const c = currentWeek.data[contextMenu.day]?.[contextMenu.time]; if(c){setClipboard({cell:c, mode:'cut'}); deleteCell(contextMenu.day, contextMenu.time); toast.success("Coupé");} setContextMenu(null); };
   const handleDelete = () => { if (!contextMenu) return; deleteCell(contextMenu.day, contextMenu.time); toast.success("Effacé"); setContextMenu(null); };
@@ -36,51 +46,56 @@ export default function App() {
   const isRestDay = (d: number) => (config.restDays || [0, 6]).includes(d);
   const applySeason = (s: 'ete'|'hiver') => { if(s==='ete') {setConfig({...config, start:"04:00", end:"23:30", isEte:true}); toast.success("Mode Été");} else {setConfig({...config, start:"06:00", end:"21:00", isEte:false}); toast.success("Mode Hiver");} };
   
-  // --- PARTAGE DE LIEN ---
   const shareLink = () => {
       if (!cloudIds.publicId) return toast.error("Sauvegardez d'abord le planning !");
-      // On génère le lien avec l'ID
-      const url = `${window.location.origin}/?id=${cloudIds.publicId}`;
-      
-      navigator.clipboard.writeText(url).then(() => {
-          toast.success("Lien copié !", { description: "Envoyez-le aux membres." });
-      });
+      const url = `${window.location.origin}/?id=${cloudIds.publicId}`; // On ne met JAMAIS le secret ici
+      navigator.clipboard.writeText(url).then(() => { toast.success("Lien copié !", { description: "Ce lien est en lecture seule pour les membres." }); });
   };
 
+  // Import/Export (cachés en mode lecture)
   const exportJSON = () => { const p = { weeks, settings: config, cloudIds, version: "v3" }; const b = new Blob([JSON.stringify(p, null, 2)], {type:"application/json"}); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href=u; a.download=`planning_${config.imamName}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); };
   const importJSON = () => { const i = document.createElement("input"); i.type="file"; i.accept="application/json"; i.onchange=async()=>{const f=i.files?.[0]; if(!f)return; try{const p=JSON.parse(await f.text()); if(p.weeks)setWeeks(p.weeks);else if(p.data)setWeeks([{label:"A",data:p.data}]); if(p.settings)setConfig(p.settings);else if(p.imamName)setConfig(pr=>({...pr, imamName:p.imamName})); if(p.cloudIds)setCloudIds(p.cloudIds); if(p.quickLabels)setQuickLabels(p.quickLabels); toast.success("Importé !");}catch{toast.error("Erreur fichier");}}; i.click(); };
 
   return (
     <div className="min-h-screen bg-stone-50 text-slate-800 font-sans">
       <Toaster position="top-right" richColors />
-      {contextMenu && ( <div className="fixed z-50 bg-white rounded-lg shadow-xl border border-slate-100 py-1 w-40" style={{ top: contextMenu.y, left: contextMenu.x }}> {contextMenu.hasContent ? (<> <button onClick={handleCutImmediate} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex gap-2"><Scissors size={14}/> Couper</button> <button onClick={handleCopy} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex gap-2"><Copy size={14}/> Copier</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={handleDelete} className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-red-600 flex gap-2"><Trash2 size={14}/> Effacer</button> </>) : <div className="px-4 py-2 text-xs text-slate-400">Vide</div>} {clipboard && (<> <div className="h-px bg-slate-100 my-1"></div> <button onClick={handlePaste} className="w-full text-left px-4 py-2 text-sm hover:bg-emerald-50 text-emerald-700 flex gap-2"><Clipboard size={14}/> Coller</button> </>)} </div> )}
+      {contextMenu && !isReadOnly && ( <div className="fixed z-50 bg-white rounded-lg shadow-xl border border-slate-100 py-1 w-40" style={{ top: contextMenu.y, left: contextMenu.x }}> {contextMenu.hasContent ? (<> <button onClick={handleCutImmediate} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex gap-2"><Scissors size={14}/> Couper</button> <button onClick={handleCopy} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex gap-2"><Copy size={14}/> Copier</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={handleDelete} className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-red-600 flex gap-2"><Trash2 size={14}/> Effacer</button> </>) : <div className="px-4 py-2 text-xs text-slate-400">Vide</div>} {clipboard && (<> <div className="h-px bg-slate-100 my-1"></div> <button onClick={handlePaste} className="w-full text-left px-4 py-2 text-sm hover:bg-emerald-50 text-emerald-700 flex gap-2"><Clipboard size={14}/> Coller</button> </>)} </div> )}
 
       <header className="bg-white/80 backdrop-blur-md border-b border-stone-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-emerald-200 shrink-0">CT</div>
                 <div className="relative">
-                    <div className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 p-1 rounded-md transition-colors pr-2" onClick={() => setShowProfileMenu(!showProfileMenu)}>
-                        <div className="leading-tight"><h1 className="font-bold text-slate-900 text-sm sm:text-base hidden sm:block">Centre Tariq Ibn Ziyad</h1><p className="text-xs text-emerald-600 font-bold flex items-center gap-1">{config.imamName} <ChevronDown size={12}/></p></div>
+                    <div className={`flex items-center gap-1 p-1 rounded-md transition-colors pr-2 ${!isReadOnly ? 'cursor-pointer hover:bg-slate-100' : ''}`} onClick={() => !isReadOnly && setShowProfileMenu(!showProfileMenu)}>
+                        <div className="leading-tight"><h1 className="font-bold text-slate-900 text-sm sm:text-base hidden sm:block">Centre Tariq Ibn Ziyad</h1><p className="text-xs text-emerald-600 font-bold flex items-center gap-1">{config.imamName} {!isReadOnly && <ChevronDown size={12}/>}</p></div>
                     </div>
-                    {showProfileMenu && (<div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50"><div className="p-2 bg-slate-50 border-b text-xs font-bold text-slate-500 uppercase tracking-wider">Choisir un planning</div>{profiles.map((p,i)=>(<button key={i} onClick={()=>handleSwitchProfile(p)} className={`w-full text-left px-4 py-3 text-sm hover:bg-emerald-50 flex justify-between ${p.publicId===cloudIds.publicId?'bg-emerald-50/50 text-emerald-700 font-medium':''}`}><span>{p.name}</span>{p.publicId===cloudIds.publicId&&<Check size={14}/>}</button>))} <div className="border-t p-2"><button onClick={()=>{resetPlanning();setShowProfileMenu(false)}} className="flex items-center gap-2 w-full px-2 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"><PlusCircle size={14}/> Nouvel Imam</button></div></div>)}
+                    {/* Menu Profils : Caché en mode lecture */}
+                    {showProfileMenu && !isReadOnly && (<div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50"><div className="p-2 bg-slate-50 border-b text-xs font-bold text-slate-500 uppercase tracking-wider">Choisir un planning</div>{profiles.map((p,i)=>(<button key={i} onClick={()=>handleSwitchProfile(p)} className={`w-full text-left px-4 py-3 text-sm hover:bg-emerald-50 flex justify-between ${p.publicId===cloudIds.publicId?'bg-emerald-50/50 text-emerald-700 font-medium':''}`}><span>{p.name}</span>{p.publicId===cloudIds.publicId&&<Check size={14}/>}</button>))} <div className="border-t p-2"><button onClick={()=>{resetPlanning();setShowProfileMenu(false)}} className="flex items-center gap-2 w-full px-2 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"><PlusCircle size={14}/> Nouvel Imam</button></div></div>)}
                 </div>
             </div>
+            
             <div className="flex items-center gap-2">
                 <div className="hidden md:flex bg-stone-100 p-1 rounded-lg mr-2">{weeks.map((w,i)=>(<button key={i} onClick={()=>setConfig(p=>({...p, weekIndex:i}))} className={`px-3 py-1.5 text-xs font-medium rounded-md ${config.weekIndex===i?'bg-white shadow text-emerald-700':'text-slate-500 hover:text-slate-700'}`}>{w.label}</button>))}</div>
                 
-                {/* BOUTON PARTAGER */}
-                <button onClick={shareLink} className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-xs font-bold" title="Partager le lien">
-                    <Share2 size={16} /> Partager
-                </button>
-
-                <button onClick={() => saveToCloud()} className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"><Cloud size={20} /></button>
-                <button onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><Settings size={20} /></button>
+                {/* BOUTONS D'ADMINISTRATION : Cachés si lecture seule */}
+                {!isReadOnly ? (
+                    <>
+                        <button onClick={shareLink} className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-xs font-bold" title="Partager le lien"><Share2 size={16} /> Partager</button>
+                        <button onClick={() => saveToCloud()} className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"><Cloud size={20} /></button>
+                        <button onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><Settings size={20} /></button>
+                    </>
+                ) : (
+                    // Ce que voit le membre : Juste un petit cadenas ou rien
+                    <div className="flex items-center gap-1 px-3 py-1 bg-stone-100 rounded-full text-xs text-stone-500 font-medium border border-stone-200">
+                        <Lock size={12} /> Lecture seule
+                    </div>
+                )}
             </div>
         </div>
       </header>
       
-      {showSettings && (
+      {/* SETTINGS PANEL : Caché en lecture seule */}
+      {showSettings && !isReadOnly && (
         <div className="max-w-7xl mx-auto p-4 bg-white border-b mb-4 animate-in slide-in-from-top-2 shadow-sm">
             <div className="grid md:grid-cols-3 gap-6">
                 <div className="space-y-4">
@@ -94,11 +109,7 @@ export default function App() {
                         <div className="space-y-2">
                             <div className="flex gap-2"><button onClick={saveToCloud} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm"><Cloud size={14} /> Sauvegarder</button><button onClick={saveProfile} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 bg-white border hover:bg-slate-50 rounded-lg shadow-sm"><Users size={14} /> Mémoriser profil</button></div>
                             <div className="bg-slate-50 p-2 rounded border mt-2"><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Connexion Technique</p><div className="grid grid-cols-2 gap-2"><input className="w-full border rounded p-1 text-[10px] font-mono" placeholder="ID Public" value={cloudIds.publicId} onChange={e => setCloudIds({...cloudIds, publicId: e.target.value})} /><input className="w-full border rounded p-1 text-[10px] font-mono" placeholder="Secret Edit" value={cloudIds.editId} onChange={e => setCloudIds({...cloudIds, editId: e.target.value})} /></div><button onClick={() => loadFromCloud()} className="mt-1 w-full text-center text-[10px] text-blue-600 hover:underline">Charger manuellement cet ID</button></div>
-                            
-                            {/* BOUTON PARTAGE DANS REGLAGES AUSSI */}
-                            <button onClick={shareLink} className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors text-sm font-bold shadow-sm">
-                                <Share2 size={16} /> Copier le lien pour les membres
-                            </button>
+                            <button onClick={shareLink} className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors text-sm font-bold shadow-sm"><Share2 size={16} /> Copier le lien pour les membres</button>
                         </div>
                         <div className="space-y-3">
                              <div className="bg-slate-50 p-3 rounded-lg border text-xs space-y-2 max-h-40 overflow-y-auto"><p className="font-bold text-slate-700">Profils enregistrés :</p>{profiles.length === 0 && <p className="text-slate-400 italic">Aucun.</p>}<ul className="space-y-1">{profiles.map(p => (<li key={p.publicId} className="flex justify-between items-center bg-white p-1.5 rounded border"><span className="truncate max-w-[120px]" title={p.name}>{p.name}</span><button onClick={() => deleteProfile(p.publicId)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={12}/></button></li>))}</ul></div>
@@ -109,7 +120,7 @@ export default function App() {
             </div>
         </div>
       )}
-      <main className="max-w-7xl mx-auto p-2 md:p-6 overflow-x-auto"><div className="min-w-[800px] grid grid-cols-[60px_repeat(7,1fr)] gap-2 pb-20"><div className="pt-12 space-y-2">{times.map(t => (<div key={t} className="h-14 flex items-center justify-end pr-3 text-xs text-slate-400 font-medium">{t}</div>))}</div>{DAYS.map((d, i) => (<div key={d} className="space-y-2"><div className={`text-center py-3 rounded-xl text-sm font-bold mb-2 ${isRestDay(i) ? 'bg-slate-800 text-white' : 'bg-white border-b-2 border-emerald-100 shadow-sm text-slate-700'}`}>{d}</div>{isRestDay(i) ? (<div className="h-full rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center opacity-50"><span className="text-slate-400 font-bold tracking-widest text-xs uppercase" style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Repos</span></div>) : (times.map(t => (<EventCell key={`${i}-${t}`} time={t} cell={currentWeek.data[i]?.[t]} isPrayerAuto={true} onClick={() => setEditingCell({ day: i, time: t })} onContextMenu={(e) => handleContextMenu(e, i, t, !!currentWeek.data[i]?.[t])} />)))}</div>))}</div></main>
+      <main className="max-w-7xl mx-auto p-2 md:p-6 overflow-x-auto"><div className="min-w-[800px] grid grid-cols-[60px_repeat(7,1fr)] gap-2 pb-20"><div className="pt-12 space-y-2">{times.map(t => (<div key={t} className="h-14 flex items-center justify-end pr-3 text-xs text-slate-400 font-medium">{t}</div>))}</div>{DAYS.map((d, i) => (<div key={d} className="space-y-2"><div className={`text-center py-3 rounded-xl text-sm font-bold mb-2 ${isRestDay(i) ? 'bg-slate-800 text-white' : 'bg-white border-b-2 border-emerald-100 shadow-sm text-slate-700'}`}>{d}</div>{isRestDay(i) ? (<div className="h-full rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center opacity-50"><span className="text-slate-400 font-bold tracking-widest text-xs uppercase" style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>Repos</span></div>) : (times.map(t => (<EventCell key={`${i}-${t}`} time={t} cell={currentWeek.data[i]?.[t]} isPrayerAuto={true} onClick={() => !isReadOnly && setEditingCell({ day: i, time: t })} onContextMenu={(e) => handleContextMenu(e, i, t, !!currentWeek.data[i]?.[t])} />)))}</div>))}</div></main>
       <EditModal isOpen={!!editingCell} data={editingCell ? currentWeek.data[editingCell.day]?.[editingCell.time] : undefined} onClose={() => setEditingCell(null)} onSave={(cell) => { if (editingCell) { updateCell(editingCell.day, editingCell.time, cell); setEditingCell(null); }}} />
     </div>
   );
