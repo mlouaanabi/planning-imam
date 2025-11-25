@@ -21,21 +21,19 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  // --- MODE LECTURE SEULE ---
-  // Si on n'a pas de "Secret d'édition" (editId), on est un simple visiteur
+  // --- DATE DU JOUR & HÉGIRIEN ---
+  const today = new Date();
+  const dateFr = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(today);
+  const dateHijri = new Intl.DateTimeFormat('fr-FR-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(today);
+  const dateFrCap = dateFr.charAt(0).toUpperCase() + dateFr.slice(1);
+
   const isReadOnly = !cloudIds.editId;
 
   // CLIC DROIT
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [clipboard, setClipboard] = useState<{ cell: Cell, mode: 'copy' | 'cut' } | null>(null);
   useEffect(() => { const close = () => setContextMenu(null); window.addEventListener('click', close); return () => window.removeEventListener('click', close); }, []);
-  
-  const handleContextMenu = (e: React.MouseEvent, day: number, time: string, hasContent: boolean) => { 
-      if (isReadOnly) return; // Pas de menu en lecture seule
-      e.preventDefault(); 
-      setContextMenu({ x: e.clientX, y: e.clientY, day, time, hasContent }); 
-  };
-  
+  const handleContextMenu = (e: React.MouseEvent, day: number, time: string, hasContent: boolean) => { if (isReadOnly) return; e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, day, time, hasContent }); };
   const handleCopy = () => { if (!contextMenu) return; const c = currentWeek.data[contextMenu.day]?.[contextMenu.time]; if(c){setClipboard({cell:c, mode:'copy'}); toast.info("Copié");} setContextMenu(null); };
   const handleCutImmediate = () => { if (!contextMenu) return; const c = currentWeek.data[contextMenu.day]?.[contextMenu.time]; if(c){setClipboard({cell:c, mode:'cut'}); deleteCell(contextMenu.day, contextMenu.time); toast.success("Coupé");} setContextMenu(null); };
   const handleDelete = () => { if (!contextMenu) return; deleteCell(contextMenu.day, contextMenu.time); toast.success("Effacé"); setContextMenu(null); };
@@ -48,11 +46,10 @@ export default function App() {
   
   const shareLink = () => {
       if (!cloudIds.publicId) return toast.error("Sauvegardez d'abord le planning !");
-      const url = `${window.location.origin}/?id=${cloudIds.publicId}`; // On ne met JAMAIS le secret ici
-      navigator.clipboard.writeText(url).then(() => { toast.success("Lien copié !", { description: "Ce lien est en lecture seule pour les membres." }); });
+      const url = `${window.location.origin}/?id=${cloudIds.publicId}`;
+      navigator.clipboard.writeText(url).then(() => { toast.success("Lien copié !", { description: "Ce lien est en lecture seule." }); });
   };
 
-  // Import/Export (cachés en mode lecture)
   const exportJSON = () => { const p = { weeks, settings: config, cloudIds, version: "v3" }; const b = new Blob([JSON.stringify(p, null, 2)], {type:"application/json"}); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href=u; a.download=`planning_${config.imamName}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); };
   const importJSON = () => { const i = document.createElement("input"); i.type="file"; i.accept="application/json"; i.onchange=async()=>{const f=i.files?.[0]; if(!f)return; try{const p=JSON.parse(await f.text()); if(p.weeks)setWeeks(p.weeks);else if(p.data)setWeeks([{label:"A",data:p.data}]); if(p.settings)setConfig(p.settings);else if(p.imamName)setConfig(pr=>({...pr, imamName:p.imamName})); if(p.cloudIds)setCloudIds(p.cloudIds); if(p.quickLabels)setQuickLabels(p.quickLabels); toast.success("Importé !");}catch{toast.error("Erreur fichier");}}; i.click(); };
 
@@ -61,40 +58,61 @@ export default function App() {
       <Toaster position="top-right" richColors />
       {contextMenu && !isReadOnly && ( <div className="fixed z-50 bg-white rounded-lg shadow-xl border border-slate-100 py-1 w-40" style={{ top: contextMenu.y, left: contextMenu.x }}> {contextMenu.hasContent ? (<> <button onClick={handleCutImmediate} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex gap-2"><Scissors size={14}/> Couper</button> <button onClick={handleCopy} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex gap-2"><Copy size={14}/> Copier</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={handleDelete} className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-red-600 flex gap-2"><Trash2 size={14}/> Effacer</button> </>) : <div className="px-4 py-2 text-xs text-slate-400">Vide</div>} {clipboard && (<> <div className="h-px bg-slate-100 my-1"></div> <button onClick={handlePaste} className="w-full text-left px-4 py-2 text-sm hover:bg-emerald-50 text-emerald-700 flex gap-2"><Clipboard size={14}/> Coller</button> </>)} </div> )}
 
-      <header className="bg-white/80 backdrop-blur-md border-b border-stone-200 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+      <header className="bg-white/90 backdrop-blur-md border-b border-stone-200 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-7xl mx-auto px-2 md:px-4 h-20 md:h-16 flex items-center justify-between">
             <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-emerald-200 shrink-0">CT</div>
+                {/* LOGO */}
+                <div className="w-12 h-12 md:w-10 md:h-10 shrink-0">
+                    <img src="/logo.png" alt="Centre Tariq Ibn Ziyad" className="w-full h-full object-contain" />
+                </div>
+
+                {/* TITRE & SELECTEUR */}
                 <div className="relative">
-                    <div className={`flex items-center gap-1 p-1 rounded-md transition-colors pr-2 ${!isReadOnly ? 'cursor-pointer hover:bg-slate-100' : ''}`} onClick={() => !isReadOnly && setShowProfileMenu(!showProfileMenu)}>
-                        <div className="leading-tight"><h1 className="font-bold text-slate-900 text-sm sm:text-base hidden sm:block">Centre Tariq Ibn Ziyad</h1><p className="text-xs text-emerald-600 font-bold flex items-center gap-1">{config.imamName} {!isReadOnly && <ChevronDown size={12}/>}</p></div>
+                    <div className={`flex flex-col cursor-pointer hover:bg-slate-100 p-1 rounded-md transition-colors pr-2 ${isReadOnly ? 'cursor-default hover:bg-transparent' : ''}`} onClick={() => !isReadOnly && setShowProfileMenu(!showProfileMenu)}>
+                        <h1 className="font-bold text-slate-900 text-sm md:text-base leading-none">Centre Tariq Ibn Ziyad</h1>
+                        <p className="text-xs text-emerald-600 font-bold flex items-center gap-1 mt-0.5">{config.imamName} {!isReadOnly && <ChevronDown size={12}/>}</p>
                     </div>
-                    {/* Menu Profils : Caché en mode lecture */}
+                    {/* Menu Profils */}
                     {showProfileMenu && !isReadOnly && (<div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50"><div className="p-2 bg-slate-50 border-b text-xs font-bold text-slate-500 uppercase tracking-wider">Choisir un planning</div>{profiles.map((p,i)=>(<button key={i} onClick={()=>handleSwitchProfile(p)} className={`w-full text-left px-4 py-3 text-sm hover:bg-emerald-50 flex justify-between ${p.publicId===cloudIds.publicId?'bg-emerald-50/50 text-emerald-700 font-medium':''}`}><span>{p.name}</span>{p.publicId===cloudIds.publicId&&<Check size={14}/>}</button>))} <div className="border-t p-2"><button onClick={()=>{resetPlanning();setShowProfileMenu(false)}} className="flex items-center gap-2 w-full px-2 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"><PlusCircle size={14}/> Nouvel Imam</button></div></div>)}
                 </div>
+            </div>
+
+            {/* DATE DU JOUR (Visible sur grands écrans, caché sur petit mobile pour gagner de la place) */}
+            <div className="hidden lg:flex flex-col items-center">
+                 <div className="text-sm font-bold text-slate-700">{dateFrCap}</div>
+                 <div className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-3 py-0.5 rounded-full border border-emerald-100 mt-0.5">
+                    🌙 {dateHijri}
+                 </div>
             </div>
             
             <div className="flex items-center gap-2">
                 <div className="hidden md:flex bg-stone-100 p-1 rounded-lg mr-2">{weeks.map((w,i)=>(<button key={i} onClick={()=>setConfig(p=>({...p, weekIndex:i}))} className={`px-3 py-1.5 text-xs font-medium rounded-md ${config.weekIndex===i?'bg-white shadow text-emerald-700':'text-slate-500 hover:text-slate-700'}`}>{w.label}</button>))}</div>
                 
-                {/* BOUTONS D'ADMINISTRATION : Cachés si lecture seule */}
                 {!isReadOnly ? (
                     <>
-                        <button onClick={shareLink} className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-xs font-bold" title="Partager le lien"><Share2 size={16} /> Partager</button>
+                        <button onClick={shareLink} className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-xs font-bold" title="Partager"><Share2 size={16} /> Partager</button>
                         <button onClick={() => saveToCloud()} className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"><Cloud size={20} /></button>
                         <button onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"><Settings size={20} /></button>
                     </>
                 ) : (
-                    // Ce que voit le membre : Juste un petit cadenas ou rien
-                    <div className="flex items-center gap-1 px-3 py-1 bg-stone-100 rounded-full text-xs text-stone-500 font-medium border border-stone-200">
-                        <Lock size={12} /> Lecture seule
+                    <div className="flex flex-col items-end">
+                         {/* Date visible en mobile ici si besoin, ou juste le cadenas */}
+                         <div className="flex items-center gap-1 px-3 py-1 bg-stone-100 rounded-full text-xs text-stone-500 font-medium border border-stone-200">
+                            <Lock size={12} /> <span className="hidden sm:inline">Lecture seule</span>
+                        </div>
                     </div>
                 )}
             </div>
         </div>
+        
+        {/* Date mobile (s'affiche sous le header sur petits écrans) */}
+        <div className="lg:hidden w-full bg-stone-50 border-b border-stone-100 py-1 text-center flex items-center justify-center gap-2 text-xs text-slate-600">
+            <span className="font-semibold">{dateFrCap}</span>
+            <span className="text-emerald-600">•</span>
+            <span>{dateHijri}</span>
+        </div>
       </header>
       
-      {/* SETTINGS PANEL : Caché en lecture seule */}
       {showSettings && !isReadOnly && (
         <div className="max-w-7xl mx-auto p-4 bg-white border-b mb-4 animate-in slide-in-from-top-2 shadow-sm">
             <div className="grid md:grid-cols-3 gap-6">
