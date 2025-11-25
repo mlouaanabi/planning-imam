@@ -1,0 +1,14 @@
+{
+    "redirects": [
+      {
+        "source": "/abdelhakim",
+        "destination": "/?id=a3819c0b-6e45-45dc-80ef-908e693b8731",
+        "permanent": false
+      },
+      {
+        "source": "/abdelatif",
+        "destination": "/?id=19c1e719-5d00-4af4-b1b4-a3000459f312",
+        "permanent": false
+      }
+    ]
+  }
