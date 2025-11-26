@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Toaster, toast } from 'sonner';
-import { Settings, Cloud, Users, PlusCircle, Trash2, Check, ChevronDown, Copy, CalendarOff, Scissors, Clipboard, Upload, FileJson, Sun, Moon, Clock, Share2, Lock, Calendar } from 'lucide-react';
+import { Settings, Cloud, Users, PlusCircle, Trash2, Check, ChevronDown, Copy, CalendarOff, Scissors, Clipboard, Upload, FileJson, Sun, Moon, Clock, Share2, Lock, Calendar, X } from 'lucide-react';
 import { usePlanning } from './hooks/usePlanning';
 import { EventCell } from './components/EventCell';
 import { EditModal } from './components/EditModal';
@@ -21,39 +21,29 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   
-  // État pour stocker la date récupérée depuis l'API
-  const [apiHijriDate, setApiHijriDate] = useState<string>("");
+  // ÉTAT POUR MAWAQIT
+  const [showMawaqit, setShowMawaqit] = useState(false);
 
-  // --- DATE DU JOUR FRANÇAIS ---
+  // --- DATE DU JOUR & HÉGIRIEN (API) ---
+  const [apiHijriDate, setApiHijriDate] = useState<string>("");
   const today = new Date();
   const dateFr = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(today);
   const dateFrCap = dateFr.charAt(0).toUpperCase() + dateFr.slice(1);
 
-  // --- RECUPERATION API ALADHAN ---
   useEffect(() => {
       const fetchHijri = async () => {
           try {
-              // On demande la date d'aujourd'hui avec l'ajustement manuel de l'Imam
-              // Le format attendu par l'API est DD-MM-YYYY
               const d = String(today.getDate()).padStart(2, '0');
               const m = String(today.getMonth() + 1).padStart(2, '0');
               const y = today.getFullYear();
-              
-              // L'API prend un paramètre "adjustment" (votre offset manuel)
               const offset = config.hijriOffset || 0;
-              
               const response = await fetch(`https://api.aladhan.com/v1/gToH/${d}-${m}-${y}?adjustment=${offset}`);
               const data = await response.json();
-              
               if (data.code === 200) {
                   const h = data.data.hijri;
-                  // On construit la phrase (ex: 14 Jumada Al-Awwal 1446)
-                  // Note: L'API renvoie souvent les mois en anglais/phonétique, on peut les traduire si besoin
-                  // Pour l'instant on utilise leur nom (souvent en phonétique correcte)
                   setApiHijriDate(`${h.day} ${h.month.en} ${h.year}`);
               }
           } catch (error) {
-              // Fallback : Si l'API plante, on utilise le calcul local comme avant
               const fallbackDate = new Date();
               fallbackDate.setDate(fallbackDate.getDate() + (config.hijriOffset || 0));
               const backup = new Intl.DateTimeFormat('fr-FR-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(fallbackDate);
@@ -61,7 +51,7 @@ export default function App() {
           }
       };
       fetchHijri();
-  }, [config.hijriOffset]); // Se relance si on change l'offset
+  }, [config.hijriOffset]);
 
   const isReadOnly = !cloudIds.editId;
 
@@ -95,6 +85,32 @@ export default function App() {
       <Toaster position="top-right" richColors />
       {contextMenu && !isReadOnly && ( <div className="fixed z-50 bg-white rounded-lg shadow-xl border border-slate-100 py-1 w-40" style={{ top: contextMenu.y, left: contextMenu.x }}> {contextMenu.hasContent ? (<> <button onClick={handleCutImmediate} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex gap-2"><Scissors size={14}/> Couper</button> <button onClick={handleCopy} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex gap-2"><Copy size={14}/> Copier</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={handleDelete} className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-red-600 flex gap-2"><Trash2 size={14}/> Effacer</button> </>) : <div className="px-4 py-2 text-xs text-slate-400">Vide</div>} {clipboard && (<> <div className="h-px bg-slate-100 my-1"></div> <button onClick={handlePaste} className="w-full text-left px-4 py-2 text-sm hover:bg-emerald-50 text-emerald-700 flex gap-2"><Clipboard size={14}/> Coller</button> </>)} </div> )}
 
+      {/* MODAL MAWAQIT */}
+      {showMawaqit && (
+          <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col" style={{ height: '80vh' }}>
+                  <div className="p-4 border-b flex justify-between items-center bg-emerald-50">
+                      <h3 className="font-bold text-emerald-800 flex items-center gap-2">🕌 Horaires de Prière (Mawaqit)</h3>
+                      <button onClick={() => setShowMawaqit(false)} className="p-2 hover:bg-emerald-100 rounded-full text-emerald-700"><X size={20} /></button>
+                  </div>
+                  <div className="flex-1 bg-slate-100 relative">
+                      {config.mawaqitSlug ? (
+                          <iframe 
+                            src={`https://mawaqit.net/fr/w/${config.mawaqitSlug}?showOnly5PrayerTimes=1`}
+                            className="w-full h-full border-0"
+                            title="Mawaqit"
+                          />
+                      ) : (
+                          <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2 p-6 text-center">
+                              <p>Aucune mosquée configurée.</p>
+                              {!isReadOnly && <p className="text-sm">Allez dans les réglages et entrez l'identifiant Mawaqit.</p>}
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
       <header className="bg-white/90 backdrop-blur-md border-b border-stone-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-2 md:px-4 h-20 md:h-16 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -108,16 +124,20 @@ export default function App() {
                 </div>
             </div>
 
-            {/* DATE DU JOUR (VERSION API) */}
             <div className="hidden lg:flex flex-col items-center">
                  <div className="text-sm font-bold text-slate-700">{dateFrCap}</div>
                  <div className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-3 py-0.5 rounded-full border border-emerald-100 mt-0.5 flex items-center gap-1">
-                    🌙 {apiHijriDate || "Chargement..."}
+                    🌙 {apiHijriDate || "..."}
                     {(config.hijriOffset !== 0) && <span className="text-[9px] opacity-50">({config.hijriOffset > 0 ? '+' : ''}{config.hijriOffset})</span>}
                  </div>
             </div>
             
             <div className="flex items-center gap-2">
+                {/* BOUTON MAWAQIT */}
+                <button onClick={() => setShowMawaqit(true)} className="flex items-center gap-1 px-2 md:px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold transition-colors">
+                    🕌 <span className="hidden sm:inline">Horaires</span>
+                </button>
+
                 <div className="hidden md:flex bg-stone-100 p-1 rounded-lg mr-2">{weeks.map((w,i)=>(<button key={i} onClick={()=>setConfig(p=>({...p, weekIndex:i}))} className={`px-3 py-1.5 text-xs font-medium rounded-md ${config.weekIndex===i?'bg-white shadow text-emerald-700':'text-slate-500 hover:text-slate-700'}`}>{w.label}</button>))}</div>
                 {!isReadOnly ? (
                     <>
@@ -131,7 +151,6 @@ export default function App() {
             </div>
         </div>
         
-        {/* DATE MOBILE */}
         <div className="lg:hidden w-full bg-stone-50 border-b border-stone-100 py-1 text-center flex items-center justify-center gap-2 text-xs text-slate-600">
             <span className="font-semibold">{dateFrCap}</span>
             <span className="text-emerald-600">•</span>
@@ -145,17 +164,19 @@ export default function App() {
                 <div className="space-y-4">
                     <div><h3 className="font-bold text-sm text-slate-900 flex items-center gap-2 mb-2"><Settings size={16} /> Configuration</h3><label className="block"><span className="text-xs font-bold text-slate-500">Nom de l'Imam</span><input className="w-full mt-1 border rounded-lg p-2 text-sm" value={config.imamName} onChange={e => setConfig({...config, imamName: e.target.value})} /></label></div>
                     
-                    {/* REGLAGE HÉGIRE */}
+                    {/* CONFIG MAWAQIT */}
                     <div className="pt-2 border-t mt-2">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1"><Calendar size={12}/> Correction Hégire</p>
-                        <div className="flex items-center gap-2 bg-stone-50 p-1 rounded border">
-                            <button onClick={() => adjustHijri(-1)} className="w-8 h-6 bg-white border rounded flex items-center justify-center text-xs hover:bg-slate-100 font-bold">-1</button>
-                            <div className="flex-1 text-center text-xs font-medium text-emerald-700">{apiHijriDate}</div>
-                            <button onClick={() => adjustHijri(1)} className="w-8 h-6 bg-white border rounded flex items-center justify-center text-xs hover:bg-slate-100 font-bold">+1</button>
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1">Date calculée via API + votre correction.</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">🕌 Lien Mawaqit</p>
+                        <input 
+                            className="w-full border rounded p-2 text-xs font-mono text-slate-600" 
+                            placeholder="ex: centre-culturel-islamique..." 
+                            value={config.mawaqitSlug || ""}
+                            onChange={e => setConfig({...config, mawaqitSlug: e.target.value})}
+                        />
+                        <p className="text-[9px] text-slate-400 mt-1">Entrez l'ID qui est dans l'URL de votre page Mawaqit.</p>
                     </div>
 
+                    <div className="pt-2 border-t mt-2"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1"><Calendar size={12}/> Correction Hégire</p><div className="flex items-center gap-2 bg-stone-50 p-1 rounded border"><button onClick={() => adjustHijri(-1)} className="w-8 h-6 bg-white border rounded flex items-center justify-center text-xs hover:bg-slate-100 font-bold">-1</button><div className="flex-1 text-center text-xs font-medium text-emerald-700">{apiHijriDate}</div><button onClick={() => adjustHijri(1)} className="w-8 h-6 bg-white border rounded flex items-center justify-center text-xs hover:bg-slate-100 font-bold">+1</button></div></div>
                     <div className="pt-2 border-t mt-2"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1"><Clock size={12}/> Plage Horaire</p><div className="flex gap-2 mb-3"><button onClick={()=>applySeason('hiver')} className={`flex-1 flex flex-col items-center justify-center p-2 rounded border text-xs ${!config.isEte?'bg-blue-50 border-blue-200 text-blue-700':'bg-white hover:bg-slate-50'}`}><div className="flex items-center gap-1 font-bold"><Moon size={12}/> Hiver</div><span className="text-[10px] opacity-75">06:00 - 21:00</span></button><button onClick={()=>applySeason('ete')} className={`flex-1 flex flex-col items-center justify-center p-2 rounded border text-xs ${config.isEte?'bg-orange-50 border-orange-200 text-orange-700':'bg-white hover:bg-slate-50'}`}><div className="flex items-center gap-1 font-bold"><Sun size={12}/> Été</div><span className="text-[10px] opacity-75">04:00 - 23:30</span></button></div><div className="grid grid-cols-2 gap-2"><label className="block"><span className="text-[10px] font-bold text-slate-400">Début</span><input type="time" className="w-full mt-1 border rounded p-1 text-xs" value={config.start} onChange={e=>setConfig({...config, start:e.target.value})} /></label><label className="block"><span className="text-[10px] font-bold text-slate-400">Fin</span><input type="time" className="w-full mt-1 border rounded p-1 text-xs" value={config.end} onChange={e=>setConfig({...config, end:e.target.value})} /></label></div></div>
                     <div className="pt-2 border-t mt-2"><p className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1"><CalendarOff size={12}/> Jours de repos</p><div className="flex flex-wrap gap-1">{DAYS.map((d, i) => (<button key={d} onClick={() => toggleRestDay(i)} className={`px-2 py-1 text-[10px] rounded border transition-colors ${isRestDay(i) ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>{d.slice(0,3)}.</button>))}</div></div>
                 </div>
